@@ -129,7 +129,8 @@ function migrateLegacyBlobsIfNeeded() {
                 inv.subtotal, inv.discount, inv.tax, inv.final, inv.received, inv.change, inv.note || '',
                 inv.returned ? 1 : 0, inv.returnedAt || null, inv.returnedBy || null);
               (inv.lines || []).forEach(l => {
-                insertLine.run(inv.id, l.productId || null, l.name, l.qty, l.unitPrice, l.addonsTotal || 0, l.addonsNames || '', l.note || '');
+                const addonsNamesText = Array.isArray(l.addonsNames) ? l.addonsNames.join(', ') : (l.addonsNames || '');
+                insertLine.run(inv.id, l.productId || null, l.name, l.qty, l.unitPrice, l.addonsTotal || 0, addonsNamesText, l.note || '');
               });
             });
           });
@@ -198,7 +199,7 @@ async function runBackup() {
 }
 
 /* ---------------- النافذة الرئيسية ---------------- */
-const APP_BUILD_VERSION = '2026-07-13-fix3';
+const APP_BUILD_VERSION = '2026-07-13-fix5';
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -288,7 +289,14 @@ ipcMain.handle('invoices:add', (event, inv) => {
     const txn = db.transaction(() => {
       insertInv.run(...invValues);
       (inv.lines || []).forEach(l => {
-        const lineValues = [inv.id, l.productId || null, l.name, l.qty, l.unitPrice, l.addonsTotal || 0, l.addonsNames || '', l.note || ''];
+        // إصلاح مهم: addonsNames قد تصل من الواجهة كقائمة (Array) وليس كنص (String)
+        // (مثلاً [] فارغة أو ['إضافة جبنة','إضافة صلصة']). عمود قاعدة البيانات addons_names
+        // من نوع TEXT ويقبل نصاً فقط، وتمرير Array مباشرة يسبب فشل ربط القيم بقاعدة البيانات.
+        // هنا نحوّلها دائماً لنص بغض النظر عن الشكل اللي وصلت فيه.
+        const addonsNamesText = Array.isArray(l.addonsNames)
+          ? l.addonsNames.join(', ')
+          : (l.addonsNames || '');
+        const lineValues = [inv.id, l.productId || null, l.name, l.qty, l.unitPrice, l.addonsTotal || 0, addonsNamesText, l.note || ''];
         insertLine.run(...lineValues);
       });
     });
