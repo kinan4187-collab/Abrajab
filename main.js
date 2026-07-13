@@ -103,6 +103,21 @@ function initDatabase() {
       total               REAL
     );
     CREATE INDEX IF NOT EXISTS idx_purchase_lines_pinv ON purchase_invoice_lines(purchase_invoice_id);
+
+    /* سجل عمليات الحذف والتعديل (Audit Log): كل عملية حذف أو تعديل حساسة
+       (فاتورة بيع، فاتورة شراء، سند دفع مورد...) تُسجَّل هنا بشكل دائم مع
+       الوقت، اسم المستخدم الذي نفّذها، ونص يشرح ماذا تغيّر بالضبط. هذا السجل
+       لا يُحذف أبداً حتى مع "تصفير البرنامج بالكامل" ليبقى أثر تاريخي واضح. */
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts         INTEGER NOT NULL,
+      action     TEXT NOT NULL,   -- 'delete' | 'edit'
+      entity     TEXT NOT NULL,   -- 'sale_invoice' | 'purchase_invoice' | 'supplier_voucher' | ...
+      label      TEXT NOT NULL,   -- وصف مختصر يعرَض في الجدول (مثال: فاتورة رقم 0032)
+      details    TEXT,            -- شرح تفصيلي لما تغيّر
+      by         TEXT             -- اسم المستخدم الذي نفّذ العملية
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
   `);
 }
 
@@ -199,7 +214,7 @@ async function runBackup() {
 }
 
 /* ---------------- النافذة الرئيسية ---------------- */
-const APP_BUILD_VERSION = '2026-07-13-fix5';
+const APP_BUILD_VERSION = '2026-07-14-fix6';
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -316,6 +331,37 @@ ipcMain.handle('invoices:markReturned', (event, id, returnedAt, returnedBy) => {
   return true;
 });
 
+/* حذف نهائي لفاتورة بيع (مع كل سطورها). الواجهة الأمامية هي المسؤولة عن عكس
+   أثر الفاتورة على المخزون/الصندوق/رصيد العميل قبل استدعاء هذا الحذف. */
+ipcMain.handle('invoices:delete', (event, id) => {
+  const txn = db.transaction(() => {
+    db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(id);
+    db.prepare('DELETE FROM invoices WHERE id = ?').run(id);
+  });
+  txn();
+  return true;
+});
+
+/* تعديل فاتورة بيع: تُستبدل كل بياناتها وسطورها بالكامل بالنسخة الجديدة.
+   نفس ملاحظة الحذف: عكس/تطبيق الأثر المالي والمخزني تتولاه الواجهة الأمامية. */
+ipcMain.handle('invoices:update', (event, inv) => {
+  const txn = db.transaction(() => {
+    db.prepare(`UPDATE invoices SET number=?, date=?, cashier=?, customer=?, customer_id=?, method=?,
+      subtotal=?, discount=?, tax=?, final=?, received=?, change=?, note=? WHERE id=?`)
+      .run(inv.number, inv.date, inv.cashier, inv.customer, inv.customerId || null, inv.method,
+        inv.subtotal, inv.discount, inv.tax, inv.final, inv.received, inv.change, inv.note || '', inv.id);
+    db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
+    const insertLine = db.prepare(`INSERT INTO invoice_lines
+      (invoice_id, product_id, name, qty, unit_price, addons_total, addons_names, note) VALUES (?,?,?,?,?,?,?,?)`);
+    (inv.lines || []).forEach(l => {
+      const addonsNamesText = Array.isArray(l.addonsNames) ? l.addonsNames.join(', ') : (l.addonsNames || '');
+      insertLine.run(inv.id, l.productId || null, l.name, l.qty, l.unitPrice, l.addonsTotal || 0, addonsNamesText, l.note || '');
+    });
+  });
+  txn();
+  return true;
+});
+
 /* ---------------- واجهات فواتير الشراء (جدول حقيقي) ---------------- */
 ipcMain.handle('purchases:getAll', () => {
   const rows = db.prepare('SELECT * FROM purchase_invoices ORDER BY date DESC').all();
@@ -345,6 +391,28 @@ ipcMain.handle('purchases:add', (event, pinv) => {
   });
   txn();
   return true;
+});
+
+/* حذف نهائي لفاتورة شراء (مع كل سطورها). الواجهة الأمامية تتولى عكس أثرها
+   على المخزون ورصيد المورّد/الصندوق قبل الاستدعاء. */
+ipcMain.handle('purchases:delete', (event, id) => {
+  const txn = db.transaction(() => {
+    db.prepare('DELETE FROM purchase_invoice_lines WHERE purchase_invoice_id = ?').run(id);
+    db.prepare('DELETE FROM purchase_invoices WHERE id = ?').run(id);
+  });
+  txn();
+  return true;
+});
+
+/* ---------------- سجل عمليات الحذف والتعديل (Audit Log) ---------------- */
+ipcMain.handle('audit:add', (event, entry) => {
+  db.prepare('INSERT INTO audit_log (ts, action, entity, label, details, by) VALUES (?,?,?,?,?,?)')
+    .run(entry.ts || Date.now(), entry.action, entry.entity, entry.label, entry.details || '', entry.by || '');
+  return true;
+});
+
+ipcMain.handle('audit:getAll', () => {
+  return db.prepare('SELECT * FROM audit_log ORDER BY ts DESC LIMIT 1000').all();
 });
 
 /* ---------------- تصفير البرنامج بالكامل (كأنه أول استخدام) ---------------- */

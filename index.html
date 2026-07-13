@@ -340,6 +340,7 @@ h2.pane-title{ font-family:'Almarai',sans-serif; font-size:20px; margin:0 0 18px
       <button data-screen="purchases" class="mgr-only">المخزون والمشتريات</button>
       <button data-screen="cash" class="mgr-only">الصندوق</button>
       <button data-screen="reports" class="mgr-only">التقارير</button>
+      <button data-screen="audit" class="mgr-only">سجل الحذف والتعديل</button>
       <button data-screen="settings" class="mgr-only">الإعدادات</button>
     </div>
     <div class="spacer"></div>
@@ -347,6 +348,7 @@ h2.pane-title{ font-family:'Almarai',sans-serif; font-size:20px; margin:0 0 18px
       <div>الموظف: <b id="topCashier">أحمد</b> <span class="role-badge" id="topRoleBadge"></span></div>
       <div>فاتورة رقم: <b id="topInvNum" class="num">--</b></div>
       <div id="topClock" class="num">--:--:--</div>
+      <button class="logout-btn mgr-only" id="topResetShortcutBtn" title="تصفير البرنامج بالكامل (حذف كل البيانات)" style="background:#3a1414;color:#ff8080;">🗑 تصفير البرنامج</button>
       <button class="logout-btn" id="logoutBtn">🚪 تبديل المستخدم</button>
     </div>
   </div>
@@ -502,7 +504,7 @@ h2.pane-title{ font-family:'Almarai',sans-serif; font-size:20px; margin:0 0 18px
       <h2 class="pane-title" style="margin-top:32px;">سندات الدفع للموردين</h2>
       <p style="color:var(--text-muted);font-size:12.5px;margin-top:-6px;">كل دفعة تُسدَّد لمورّد له رصيد آجل (لم تُدفع فاتورته كاملة) تُسجَّل هنا كسند دفع، وتخصم تلقائياً من رصيد الصندوق.</p>
       <table class="table-list">
-        <thead><tr><th>التاريخ</th><th>المورّد</th><th>المبلغ المدفوع</th><th>الرصيد بعد السند</th><th>ملاحظة</th><th>بواسطة</th></tr></thead>
+        <thead><tr><th>التاريخ</th><th>المورّد</th><th>المبلغ المدفوع</th><th>الرصيد بعد السند</th><th>ملاحظة</th><th>بواسطة</th><th></th></tr></thead>
         <tbody id="supplierVouchersTbody"></tbody>
       </table>
     </div>
@@ -562,6 +564,20 @@ h2.pane-title{ font-family:'Almarai',sans-serif; font-size:20px; margin:0 0 18px
       <table class="table-list">
         <thead><tr><th>المكوّن</th><th>الكمية المتوفرة</th><th>الحد الأدنى</th></tr></thead>
         <tbody id="repLowStockTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- AUDIT LOG SCREEN -->
+  <div class="screen" id="screen-audit">
+    <div class="list-screen">
+      <h2 class="pane-title">سجل الحذف والتعديل</h2>
+      <p style="color:var(--text-muted);font-size:12.5px;margin-top:-8px;">
+        كل عملية حذف أو تعديل لفاتورة بيع، فاتورة شراء، أو سند دفع مورّد تُسجَّل هنا تلقائياً مع الوقت واسم المسؤول عنها، ولا تُحذف حتى مع تصفير البرنامج.
+      </p>
+      <table class="table-list">
+        <thead><tr><th>التاريخ والوقت</th><th>الإجراء</th><th>القسم</th><th>البند</th><th>التفاصيل</th><th>بواسطة</th></tr></thead>
+        <tbody id="auditLogTbody"></tbody>
       </table>
     </div>
   </div>
@@ -981,6 +997,35 @@ h2.pane-title{ font-family:'Almarai',sans-serif; font-size:20px; margin:0 0 18px
   </div>
 </div>
 
+<!-- EDIT SALE INVOICE MODAL -->
+<div class="modal-bg" id="editInvoiceModalBg">
+  <div class="modal pop" style="max-width:560px;">
+    <h3 id="editInvoiceTitle">تعديل فاتورة</h3>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:-6px;">يمكنك تعديل الكميات أو حذف أصناف، وتغيير الزبون/طريقة الدفع/الخصم. سيتم تصحيح الصندوق والمخزون ورصيد العميل تلقائياً حسب الفرق.</p>
+    <div id="editInvoiceLines" style="max-height:220px;overflow-y:auto;margin:10px 0;"></div>
+    <div class="row2f">
+      <div class="field"><label>طريقة الدفع</label>
+        <select id="editInvoiceMethod">
+          <option value="cash">🟢 نقدي</option>
+          <option value="card">🔵 بطاقة</option>
+          <option value="credit">🟠 آجل (دين)</option>
+        </select>
+      </div>
+      <div class="field" id="editInvoiceCustomerWrap"><label>اسم الزبون</label><input type="text" id="editInvoiceCustomer"></div>
+    </div>
+    <div class="field" id="editInvoiceCustSelWrap" style="display:none;"><label>العميل (للدين)</label><select id="editInvoiceCustSel"></select></div>
+    <div class="row2f">
+      <div class="field"><label>الخصم</label><input type="number" id="editInvoiceDiscount" step="0.25"></div>
+      <div class="field"><label>ملاحظة</label><input type="text" id="editInvoiceNote"></div>
+    </div>
+    <div style="text-align:left;margin-top:8px;font-size:13px;color:var(--text-muted);">الإجمالي النهائي الجديد: <b class="num" id="editInvoiceFinalPreview" style="color:var(--accent-amber);">0.00</b></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="editInvoiceCancelBtn">إلغاء</button>
+      <button class="btn btn-amber" id="editInvoiceSaveBtn">💾 حفظ التعديلات</button>
+    </div>
+  </div>
+</div>
+
 <!-- PURCHASE INVOICE VIEW MODAL -->
 <div class="modal-bg" id="purchViewModalBg">
   <div class="modal pop">
@@ -1103,6 +1148,7 @@ let drawerCloses = [];
 let pendingCashAction = null; // 'withdraw' | 'deposit'
 let pendingSupplierPay = null;
 let supplierPayments = []; // {id, supplierId, supplierName, amount, note, date, balanceAfter, by} — سندات الدفع للموردين
+let auditLog = []; // سجل عمليات الحذف والتعديل (يُحمَّل من جدول SQL منفصل ولا يتأثر بتصفير البرنامج)
 let currentOrder = []; // {lineId, productId, name, qty, unitPrice, addonsTotal, addonsNames, note}
 let currentCatId = null;
 let discount = 0; // fixed amount
@@ -1169,6 +1215,36 @@ async function loadState(){
       drawerCloses = d.drawerCloses || [];
     } else throw new Error('none');
   }catch(e){ cashDrawer = {balance:0}; cashMovements = []; drawerCloses = []; }
+  try{
+    auditLog = (window.auditAPI ? await window.auditAPI.getAll() : []) || [];
+  }catch(e){ console.error('load audit log failed', e); auditLog = []; }
+}
+/* تسجيل عملية حذف/تعديل في سجل العمليات (يُخزَّن دائماً وفوراً في قاعدة البيانات) */
+async function logAudit(action, entity, label, details){
+  const entry = { ts: Date.now(), action, entity, label, details: details||'', by: currentUser?currentUser.name:settings.cashierName };
+  try{
+    if(window.auditAPI) await window.auditAPI.add(entry);
+  }catch(e){ console.error('audit log save failed', e); }
+  auditLog.unshift(entry);
+  if(document.getElementById('screen-audit') && document.getElementById('screen-audit').classList.contains('active')) renderAuditLog();
+}
+function renderAuditLog(){
+  const tbody = document.getElementById('auditLogTbody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  if(auditLog.length===0){ tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px;">لا توجد عمليات حذف أو تعديل مسجّلة بعد</td></tr>'; return; }
+  const actionLabels = { delete:'🗑 حذف', edit:'✏️ تعديل' };
+  const entityLabels = { sale_invoice:'فاتورة بيع', purchase_invoice:'فاتورة شراء', supplier_voucher:'سند دفع مورّد' };
+  auditLog.slice(0,500).forEach(a=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td style="font-size:11px;">'+new Date(a.ts).toLocaleString('ar-EG')+'</td>'+
+      '<td>'+(actionLabels[a.action]||a.action)+'</td>'+
+      '<td>'+(entityLabels[a.entity]||a.entity)+'</td>'+
+      '<td>'+(a.label||'-')+'</td>'+
+      '<td style="font-size:12px;color:var(--text-muted);">'+(a.details||'-')+'</td>'+
+      '<td>'+(a.by||'-')+'</td>';
+    tbody.appendChild(tr);
+  });
 }
 async function saveInventory(){
   try{ await window.storage.set('pos-inventory', JSON.stringify({inventoryItems}), false); }
@@ -1827,7 +1903,7 @@ document.getElementById('btnPrint').onclick = ()=>{
 };
 
 /* ---------------- SCREEN SWITCH ---------------- */
-const MGR_SCREENS = ['purchases','cash','reports','settings'];
+const MGR_SCREENS = ['purchases','cash','reports','settings','audit'];
 function switchScreen(name){
   if(MGR_SCREENS.includes(name) && !(currentUser && currentUser.role==='manager')){
     toast('هذه الشاشة للمدير فقط');
@@ -1842,6 +1918,7 @@ function switchScreen(name){
   if(name==='purchases'){ renderInventoryTable(); renderPurchaseIngredientSelect(); renderPurchaseProductSelect(); renderPurchaseLines(); renderPurchaseInvoicesTable(); renderSupplierSelect(); renderSuppliersTable(); renderSupplierVouchersTable(); }
   if(name==='cash'){ renderDrawerBalance(); renderCashMovements(); renderDrawerCloses(); }
   if(name==='reports') renderReports();
+  if(name==='audit') renderAuditLog();
 }
 document.querySelectorAll('.nav-tabs button').forEach(b=> b.onclick = ()=> switchScreen(b.dataset.screen));
 
@@ -1862,13 +1939,196 @@ function renderInvoicesTable(){
       '<td>'+(methodLabels[inv.method]||inv.method)+'</td>'+
       '<td class="num">'+settings.currency+money(inv.final)+'</td>'+
       '<td>'+(inv.returned ? '<span class="pill off">مرتجعة</span>' : '<span class="pill on">مكتملة</span>')+'</td>'+
-      '<td><button class="link-btn" data-act="view">تفاصيل</button>'+(inv.returned?'':' <button class="link-btn danger" data-act="return">إرجاع</button>')+'</td>';
+      '<td><button class="link-btn" data-act="view">تفاصيل</button>'+(inv.returned?'':' <button class="link-btn danger" data-act="return">إرجاع</button>')+
+      ' <button class="link-btn" data-act="edit">تعديل</button> <button class="link-btn danger" data-act="del">حذف</button></td>';
     tr.querySelector('[data-act=view]').onclick = ()=> showReceipt(inv);
     const retBtn = tr.querySelector('[data-act=return]');
     if(retBtn) retBtn.onclick = ()=> returnInvoice(inv);
+    tr.querySelector('[data-act=edit]').onclick = ()=> openEditInvoiceModal(inv);
+    tr.querySelector('[data-act=del]').onclick = ()=> deleteInvoice(inv);
     tbody.appendChild(tr);
   });
 }
+
+/* ---------------- عكس/تطبيق أثر فاتورة بيع على المخزون والصندوق ورصيد العميل ----------------
+   دوال مشتركة يستخدمها كل من "حذف فاتورة" و"تعديل فاتورة" (تعديل = عكس القديم ثم تطبيق الجديد). */
+async function reverseInvoiceEffects(inv, reasonNote){
+  let changed = false, productsChanged = false;
+  (inv.lines||[]).forEach(l=>{
+    if(!l.productId) return;
+    const product = products.find(p=>p.id===l.productId);
+    if(!product) return;
+    if(product.recipe && product.recipe.length){
+      product.recipe.forEach(r=>{
+        const ing = inventoryItems.find(i=>i.name===r.name);
+        if(ing){ ing.qty = Math.round((ing.qty + r.qty*l.qty)*1000)/1000; changed = true; }
+      });
+    }
+    if(product.trackStock){ product.stock = Math.round(((product.stock||0)+l.qty)*1000)/1000; productsChanged = true; }
+  });
+  if(changed) await saveInventory();
+  if(productsChanged) await saveCatalog();
+  if(inv.method==='cash'){
+    logCashMovement('refund', inv.final, 'out', reasonNote||('تصحيح فاتورة رقم '+String(inv.number).padStart(4,'0')));
+    await saveCash();
+  } else if(inv.method==='credit' && inv.customerId){
+    const c = customers.find(x=>x.id===inv.customerId);
+    if(c){ c.balance = Math.round(((c.balance||0)-inv.final)*100)/100; await saveCustomers(); }
+  } else if(inv.method==='card'){
+    cashMovements.unshift({ id: uid('mv'), type:'refund', amount: inv.final, direction:'out', note:(reasonNote||('تصحيح فاتورة رقم '+String(inv.number).padStart(4,'0')))+' (غير نقدي)', by: currentUser?currentUser.name:settings.cashierName, ts: Date.now(), nonCash:true });
+    await saveCash();
+  }
+}
+async function applyInvoiceEffects(inv, reasonNote){
+  let changed = false, productsChanged = false;
+  (inv.lines||[]).forEach(l=>{
+    if(!l.productId) return;
+    const product = products.find(p=>p.id===l.productId);
+    if(!product) return;
+    if(product.recipe && product.recipe.length){
+      product.recipe.forEach(r=>{
+        const ing = inventoryItems.find(i=>i.name===r.name);
+        if(ing){ ing.qty = Math.round(Math.max(0, ing.qty - r.qty*l.qty)*1000)/1000; changed = true; }
+      });
+    }
+    if(product.trackStock){ product.stock = Math.round(Math.max(0, (product.stock||0)-l.qty)*1000)/1000; productsChanged = true; }
+  });
+  if(changed) await saveInventory();
+  if(productsChanged) await saveCatalog();
+  if(inv.method==='cash'){
+    logCashMovement('sale_cash', inv.final, 'in', reasonNote||('فاتورة بيع رقم '+String(inv.number).padStart(4,'0')));
+    await saveCash();
+  } else if(inv.method==='card'){
+    cashMovements.unshift({ id: uid('mv'), type:'sale_card', amount: inv.final, direction:'in', note:(reasonNote||('فاتورة بيع رقم '+String(inv.number).padStart(4,'0')))+' (غير نقدي)', by: currentUser?currentUser.name:settings.cashierName, ts: Date.now(), nonCash:true });
+    await saveCash();
+  } else if(inv.method==='credit' && inv.customerId){
+    const c = customers.find(x=>x.id===inv.customerId);
+    if(c){ c.balance = Math.round(((c.balance||0)+inv.final)*100)/100; await saveCustomers(); }
+  }
+}
+
+/* ---------------- حذف فاتورة بيع نهائياً ---------------- */
+async function deleteInvoice(inv){
+  if(!(await requireManagerAuth('حذف فاتورة رقم '+String(inv.number).padStart(4,'0')))) return;
+  if(!confirm('سيتم حذف الفاتورة رقم '+String(inv.number).padStart(4,'0')+' نهائياً (وليس إرجاعها)، وستُعاد الكميات للمخزون ويُصحَّح الصندوق/رصيد العميل تلقائياً. هذا الإجراء لا يمكن التراجع عنه. متابعة؟')) return;
+  try{
+    if(!inv.returned){
+      await reverseInvoiceEffects(inv, 'حذف فاتورة رقم '+String(inv.number).padStart(4,'0'));
+    }
+    await window.invoicesAPI.delete(inv.id);
+    invoices = invoices.filter(x=>x.id!==inv.id);
+    // إذا كانت هذه آخر فاتورة صدرت، نُرجع عدّاد الفواتير خطوة للخلف حتى لا تبقى فجوة بالترقيم
+    if(inv.number === settings.invoiceCounter - 1){
+      settings.invoiceCounter -= 1;
+      await saveCatalog();
+      renderTopbar();
+    }
+    await logAudit('delete','sale_invoice','فاتورة رقم '+String(inv.number).padStart(4,'0'),
+      'العميل: '+(inv.customer||'-')+' — الإجمالي: '+settings.currency+money(inv.final)+' — طريقة الدفع: '+inv.method);
+    renderInvoicesTable(); renderInventoryTable(); renderDrawerBalance(); renderCashMovements(); renderItems(); renderCustomersTable();
+    toast('تم حذف الفاتورة نهائياً');
+  }catch(e){ console.error(e); toast('فشل حذف الفاتورة، حاول مجدداً'); }
+}
+
+/* ---------------- تعديل فاتورة بيع ---------------- */
+let editingInvoice = null;
+let editingInvoiceLines = [];
+function openEditInvoiceModal(inv){
+  editingInvoice = inv;
+  editingInvoiceLines = (inv.lines||[]).map(l=> Object.assign({}, l));
+  document.getElementById('editInvoiceTitle').textContent = 'تعديل فاتورة رقم '+String(inv.number).padStart(4,'0');
+  document.getElementById('editInvoiceMethod').value = inv.method;
+  document.getElementById('editInvoiceCustomer').value = inv.method==='credit' ? '' : (inv.customer||'');
+  document.getElementById('editInvoiceDiscount').value = inv.discount||0;
+  document.getElementById('editInvoiceNote').value = inv.note||'';
+  const custSel = document.getElementById('editInvoiceCustSel');
+  custSel.innerHTML = customers.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');
+  if(inv.customerId) custSel.value = inv.customerId;
+  toggleEditInvoiceMethodFields();
+  renderEditInvoiceLines();
+  document.getElementById('editInvoiceModalBg').classList.add('show');
+}
+function toggleEditInvoiceMethodFields(){
+  const method = document.getElementById('editInvoiceMethod').value;
+  document.getElementById('editInvoiceCustomerWrap').style.display = method==='credit' ? 'none':'';
+  document.getElementById('editInvoiceCustSelWrap').style.display = method==='credit' ? '':'none';
+}
+document.getElementById('editInvoiceMethod').addEventListener('change', toggleEditInvoiceMethodFields);
+function renderEditInvoiceLines(){
+  const wrap = document.getElementById('editInvoiceLines');
+  wrap.innerHTML = '';
+  if(editingInvoiceLines.length===0){ wrap.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:10px;">لا توجد أصناف — يمكنك حذف الفاتورة بالكامل بدل تعديلها</div>'; }
+  editingInvoiceLines.forEach((l,idx)=>{
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);';
+    row.innerHTML = '<div style="flex:1;font-size:13px;">'+l.name+'</div>'+
+      '<input type="number" min="0" step="1" value="'+l.qty+'" style="width:70px;background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--text-primary);" data-idx="'+idx+'" class="editLineQty">'+
+      '<div class="num" style="width:70px;text-align:left;">'+settings.currency+money((l.unitPrice+(l.addonsTotal||0))*l.qty)+'</div>'+
+      '<button type="button" class="link-btn danger" data-idx="'+idx+'" data-del="1">حذف</button>';
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('.editLineQty').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const idx = parseInt(inp.dataset.idx);
+      const qty = parseFloat(inp.value);
+      editingInvoiceLines[idx].qty = isNaN(qty)||qty<0 ? 0 : qty;
+      recomputeEditInvoiceFinal();
+    });
+  });
+  wrap.querySelectorAll('[data-del="1"]').forEach(btn=>{
+    btn.onclick = ()=>{ editingInvoiceLines.splice(parseInt(btn.dataset.idx),1); renderEditInvoiceLines(); recomputeEditInvoiceFinal(); };
+  });
+  recomputeEditInvoiceFinal();
+}
+function recomputeEditInvoiceFinal(){
+  const sub = editingInvoiceLines.reduce((s,l)=> s + (l.unitPrice+(l.addonsTotal||0))*l.qty, 0);
+  const discountVal = parseFloat(document.getElementById('editInvoiceDiscount').value)||0;
+  const taxable = Math.max(0, sub - discountVal);
+  const tax = Math.round(taxable*(Number(settings.taxRate||0)/100)*100)/100;
+  const final = Math.round((taxable+tax)*100)/100;
+  document.getElementById('editInvoiceFinalPreview').textContent = settings.currency+money(final);
+  return { sub, discount: discountVal, tax, final };
+}
+document.getElementById('editInvoiceDiscount').addEventListener('input', recomputeEditInvoiceFinal);
+document.getElementById('editInvoiceCancelBtn').onclick = ()=>{ document.getElementById('editInvoiceModalBg').classList.remove('show'); editingInvoice=null; };
+document.getElementById('editInvoiceSaveBtn').onclick = async ()=>{
+  if(!editingInvoice) return;
+  if(!(await requireManagerAuth('حفظ تعديل فاتورة رقم '+String(editingInvoice.number).padStart(4,'0')))) return;
+  if(editingInvoiceLines.some(l=>!l.qty || l.qty<=0)){ toast('احذف الأصناف بكمية صفر بدل تركها'); return; }
+  const method = document.getElementById('editInvoiceMethod').value;
+  let customer = document.getElementById('editInvoiceCustomer').value.trim();
+  let customerId = null;
+  if(method==='credit'){
+    const c = customers.find(x=>x.id===document.getElementById('editInvoiceCustSel').value);
+    if(!c){ toast('اختر عميلاً لتسجيل الدين عليه'); return; }
+    customer = c.name; customerId = c.id;
+  }
+  const totals = recomputeEditInvoiceFinal();
+  if(!confirm('سيتم حفظ التعديلات وتصحيح الصندوق/المخزون/رصيد العميل تلقائياً حسب الفرق بين النسخة القديمة والجديدة. متابعة؟')) return;
+  const oldSummary = 'الإجمالي القديم: '+settings.currency+money(editingInvoice.final)+' ('+editingInvoice.method+')';
+  try{
+    if(!editingInvoice.returned){
+      await reverseInvoiceEffects(editingInvoice, 'تعديل فاتورة رقم '+String(editingInvoice.number).padStart(4,'0')+' — عكس النسخة القديمة');
+    }
+    const updated = Object.assign({}, editingInvoice, {
+      lines: editingInvoiceLines, method, customer: customer||'-', customerId,
+      subtotal: totals.sub, discount: totals.discount, tax: totals.tax, final: totals.final,
+      note: document.getElementById('editInvoiceNote').value.trim()
+    });
+    if(!updated.returned){
+      await applyInvoiceEffects(updated, 'تعديل فاتورة رقم '+String(updated.number).padStart(4,'0')+' — تطبيق النسخة الجديدة');
+    }
+    await window.invoicesAPI.update(updated);
+    const i = invoices.findIndex(x=>x.id===updated.id);
+    if(i>-1) invoices[i] = updated;
+    await logAudit('edit','sale_invoice','فاتورة رقم '+String(updated.number).padStart(4,'0'),
+      oldSummary+' ⟶ الإجمالي الجديد: '+settings.currency+money(updated.final)+' ('+updated.method+')');
+    document.getElementById('editInvoiceModalBg').classList.remove('show');
+    editingInvoice = null;
+    renderInvoicesTable(); renderInventoryTable(); renderDrawerBalance(); renderCashMovements(); renderItems(); renderCustomersTable();
+    toast('تم حفظ تعديلات الفاتورة');
+  }catch(e){ console.error(e); toast('فشل حفظ التعديل، حاول مجدداً'); }
+};
 async function returnInvoice(inv){
   if(!(await requireManagerAuth('إرجاع فاتورة رقم '+String(inv.number).padStart(4,'0')))) return;
   if(!confirm('سيتم إرجاع الفاتورة رقم '+String(inv.number).padStart(4,'0')+' بقيمة '+settings.currency+money(inv.final)+' وإعادة الكميات للمخزون. متابعة؟')) return;
@@ -2334,10 +2594,45 @@ function renderPurchaseInvoicesTable(){
     tr.innerHTML = '<td style="font-size:11px;">'+new Date(inv.date).toLocaleString('ar-EG')+'</td><td>'+inv.supplier+'</td>'+
       '<td class="num">'+inv.lines.length+'</td><td class="num">'+settings.currency+money(inv.total)+'</td>'+
       '<td><span class="pill '+(inv.paymentType==='cash'?'on':'off')+'">'+(inv.paymentType==='cash'?'نقدي':'آجل')+'</span></td>'+
-      '<td><button class="link-btn" data-act="view">عرض / طباعة</button></td>';
+      '<td><button class="link-btn" data-act="view">عرض / طباعة</button> <button class="link-btn danger" data-act="del">حذف</button></td>';
     tr.querySelector('[data-act=view]').onclick = ()=> showPurchaseInvoiceModal(inv);
+    tr.querySelector('[data-act=del]').onclick = ()=> deletePurchaseInvoice(inv);
     tbody.appendChild(tr);
   });
+}
+/* ---------------- حذف فاتورة شراء نهائياً ---------------- */
+async function deletePurchaseInvoice(inv){
+  if(!(await requireManagerAuth('حذف فاتورة شراء من '+(inv.supplier||'-')))) return;
+  if(!confirm('سيتم حذف فاتورة الشراء هذه نهائياً (الإجمالي: '+settings.currency+money(inv.total)+')، وسيُخصَم ما أُضيف للمخزون بسببها، ويُصحَّح الصندوق أو رصيد المورّد تلقائياً. متابعة؟')) return;
+  try{
+    let ingChanged=false, productsChanged=false;
+    (inv.lines||[]).forEach(l=>{
+      if(l.productId){
+        const p = products.find(x=>x.id===l.productId);
+        if(p){ p.stock = Math.round(Math.max(0,((p.stock||0)-l.qty))*1000)/1000; productsChanged=true; }
+      } else if(l.ingId){
+        const ing = inventoryItems.find(i=>i.id===l.ingId);
+        if(ing){ ing.qty = Math.round(Math.max(0, ing.qty - l.qty)*1000)/1000; ingChanged=true; }
+      }
+    });
+    if(ingChanged) await saveInventory();
+    if(productsChanged) await saveCatalog();
+    const supplier = suppliers.find(s=>s.id===inv.supplierId);
+    if(inv.paymentType==='cash'){
+      logCashMovement('refund', inv.total, 'in', 'حذف فاتورة شراء'+(supplier?(' - '+supplier.name):''));
+      await saveCash();
+    } else if(supplier){
+      supplier.balance = Math.round(((supplier.balance||0)-inv.total)*100)/100;
+      await saveSuppliers();
+    }
+    await window.purchasesAPI.delete(inv.id);
+    purchaseInvoices = purchaseInvoices.filter(x=>x.id!==inv.id);
+    await logAudit('delete','purchase_invoice','فاتورة شراء — '+(inv.supplier||'-'),
+      'الإجمالي: '+settings.currency+money(inv.total)+' — طريقة الدفع: '+(inv.paymentType==='cash'?'نقدي':'آجل'));
+    renderPurchaseInvoicesTable(); renderInventoryTable(); renderIngredientsTable(); renderSuppliersTable(); renderItems(); renderDrawerBalance(); renderCashMovements();
+    if(document.getElementById('itemsTbody')) renderItemsTable();
+    toast('تم حذف فاتورة الشراء');
+  }catch(e){ console.error(e); toast('فشل حذف فاتورة الشراء، حاول مجدداً'); }
 }
 
 /* ---------------- عرض/طباعة فاتورة الشراء: كشف داخلي (شراء+بيع) مقابل نسخة المورّد (شراء فقط) ---------------- */
@@ -2544,7 +2839,7 @@ function renderSupplierVouchersTable(){
   const tbody = document.getElementById('supplierVouchersTbody');
   if(!tbody) return;
   tbody.innerHTML = '';
-  if(supplierPayments.length===0){ tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">لا توجد سندات دفع بعد</td></tr>'; return; }
+  if(supplierPayments.length===0){ tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px;">لا توجد سندات دفع بعد</td></tr>'; return; }
   supplierPayments.slice(0,300).forEach(pm=>{
     const tr = document.createElement('tr');
     tr.innerHTML = '<td style="font-size:11px;">'+new Date(pm.date).toLocaleString('ar-EG')+'</td>'+
@@ -2552,9 +2847,27 @@ function renderSupplierVouchersTable(){
       '<td class="num">'+settings.currency+money(pm.amount)+'</td>'+
       '<td class="num" style="color:'+(pm.balanceAfter>0?'var(--accent-red)':'var(--accent-green)')+'">'+settings.currency+money(pm.balanceAfter||0)+'</td>'+
       '<td style="font-size:12px;">'+(pm.note||'-')+'</td>'+
-      '<td>'+(pm.by||'-')+'</td>';
+      '<td>'+(pm.by||'-')+'</td>'+
+      '<td><button class="link-btn danger" data-act="del">حذف</button></td>';
+    tr.querySelector('[data-act=del]').onclick = ()=> deleteSupplierVoucher(pm);
     tbody.appendChild(tr);
   });
+}
+/* ---------------- حذف سند دفع لمورّد ---------------- */
+async function deleteSupplierVoucher(pm){
+  if(!(await requireManagerAuth('حذف سند دفع لـ '+(pm.supplierName||'-')))) return;
+  if(!confirm('سيتم حذف سند الدفع هذا نهائياً (المبلغ: '+settings.currency+money(pm.amount)+')، وستتم إعادة المبلغ لرصيد المورّد المستحق ولصندوق النقدية. متابعة؟')) return;
+  try{
+    const s = suppliers.find(x=>x.id===pm.supplierId);
+    if(s){ s.balance = Math.round(((s.balance||0)+pm.amount)*100)/100; }
+    logCashMovement('refund', pm.amount, 'in', 'حذف سند دفع لمورّد: '+(pm.supplierName||'-'));
+    supplierPayments = supplierPayments.filter(x=>x.id!==pm.id);
+    await saveSuppliers(); await saveCash();
+    await logAudit('delete','supplier_voucher','سند دفع لـ '+(pm.supplierName||'-'),
+      'المبلغ: '+settings.currency+money(pm.amount)+(pm.note?(' — ملاحظة: '+pm.note):''));
+    renderSupplierVouchersTable(); renderSuppliersTable(); renderDrawerBalance(); renderCashMovements();
+    toast('تم حذف سند الدفع');
+  }catch(e){ console.error(e); toast('فشل حذف السند، حاول مجدداً'); }
 }
 function renderSupplierStatement(s){
   document.getElementById('supplierStatementTitle').textContent = 'كشف حساب: '+s.name;
@@ -2939,6 +3252,13 @@ document.getElementById('logoutBtn').onclick = ()=>{
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('loginPinInput').focus();
+};
+document.getElementById('topResetShortcutBtn').onclick = ()=>{
+  switchScreen('settings');
+  document.querySelectorAll('.settings-nav button').forEach(b=> b.classList.toggle('active', b.dataset.pane==='backup'));
+  document.querySelectorAll('.settings-pane').forEach(p=> p.classList.toggle('active', p.id==='pane-backup'));
+  const btn = document.getElementById('resetProgramBtn');
+  if(btn) btn.scrollIntoView({behavior:'smooth', block:'center'});
 };
 document.getElementById('loginBtn').onclick = doLogin;
 document.getElementById('loginPinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });

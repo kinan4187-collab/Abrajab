@@ -22,12 +22,21 @@ contextBridge.exposeInMainWorld('invoicesAPI', {
   getAll:       ()                              => ipcRenderer.invoke('invoices:getAll'),
   add:          (invoice)                       => ipcRenderer.invoke('invoices:add', invoice),
   markReturned: (id, returnedAt, returnedBy)    => ipcRenderer.invoke('invoices:markReturned', id, returnedAt, returnedBy),
+  delete:       (id)                            => ipcRenderer.invoke('invoices:delete', id),
+  update:       (invoice)                       => ipcRenderer.invoke('invoices:update', invoice),
 });
 
 /* فواتير الشراء من الموردين: نفس المبدأ */
 contextBridge.exposeInMainWorld('purchasesAPI', {
   getAll: ()          => ipcRenderer.invoke('purchases:getAll'),
   add:    (purchase)  => ipcRenderer.invoke('purchases:add', purchase),
+  delete: (id)        => ipcRenderer.invoke('purchases:delete', id),
+});
+
+/* سجل عمليات الحذف والتعديل (Audit Log) */
+contextBridge.exposeInMainWorld('auditAPI', {
+  add:    (entry) => ipcRenderer.invoke('audit:add', entry),
+  getAll: ()       => ipcRenderer.invoke('audit:getAll'),
 });
 
 /* تصفير البرنامج بالكامل */
